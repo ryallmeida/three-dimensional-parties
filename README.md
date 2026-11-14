@@ -1,6 +1,23 @@
 # three-dimensional-parties
 Redutos eleitorais em três dimensões 
 
+## PACKAGES 
+
+```R
+if (!base::requireNamespace("pacman", quietly = TRUE)) {
+  utils::install.packages("pacman")
+}
+
+pacman::p_load(
+  electionsBR,
+  dplyr,
+  readr,
+  stringr,
+  tidyselect
+)
+```
+
+
 ## Limitações, agenda e considerações finais
 - A seção eleitoral não é necessariamente uma unidade espacial estável, visto que ela é uma dimensão/unidade administrativa e não geofráfica, de modo que isso desemboca numa afetação para a competição independentemente da magnitude distrital. A questão é que os dados geográficos associados às seções eleitorais não são necessariamente constantes entre eleições.
 - Uma sessão pode: (i) Ter seu local de votação alterado; (ii) ser transferida para outro endereço; (iii) ser agregada a outra seção; (iv) ser desativada; (v) Ser renumerada; (vi) ter seu endereço ou cadastro geográfico corrigido.
