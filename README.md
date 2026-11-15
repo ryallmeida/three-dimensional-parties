@@ -17,6 +17,11 @@ pacman::p_load(
 )
 ```
 
+## DATABASE DESCRIPTION [![MIT license](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/ryallmeida/ppe?tab=MIT-1-ov-file) [![Open Data](https://img.shields.io/badge/OPEN-DATA-blue)](https://opendefinition.org/od/2.1/en/)
+
+
+
+
 
 ## Limitações, agenda e considerações finais
 - A seção eleitoral não é necessariamente uma unidade espacial estável, visto que ela é uma dimensão/unidade administrativa e não geofráfica, de modo que isso desemboca numa afetação para a competição independentemente da magnitude distrital. A questão é que os dados geográficos associados às seções eleitorais não são necessariamente constantes entre eleições.
