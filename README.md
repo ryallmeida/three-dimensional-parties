@@ -19,6 +19,9 @@ pacman::p_load(
 
 ## DATABASE DESCRIPTION [![MIT license](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/ryallmeida/ppe?tab=MIT-1-ov-file) [![Open Data](https://img.shields.io/badge/OPEN-DATA-blue)](https://opendefinition.org/od/2.1/en/)
 
+## RESULTADOS
+
+![Descrição da animação](figuras/animacao_PT.gif)
 
 
 
