@@ -516,6 +516,14 @@ base::message("PASSO 8: exemplos")
 
 graficos_reduto("SOLIDARIEDADE|^SD$", 2022)
 
+graficos_reduto("^PSDB$", 2022)
+graficos_reduto("^PL$", 2022)
+graficos_reduto("^PSB$", 2022)
+graficos_reduto("UNIÃO|^UNIAO$", 2022)
+graficos_reduto("SOLIDARIEDADE|^SD$", 2022)
+graficos_reduto("^PCB$", 2022)
+
+
 # Outros exemplos (tire o # para rodar):
 # graficos_reduto("^PSB$", 2018)
 # graficos_reduto("^PSB$", 2022, escala = "ano")
@@ -683,3 +691,203 @@ animar_reduto("^PT$")
 base::message("PASSO FINAL: informações da sessão")
 utils::sessionInfo()
 
+# =============================================================================
+# ANEXO: FUNÇÃO PLOTANDO GRAFICOS EM DUPLA
+# =============================================================================
+
+# ANOS DE 2022 ----------------------------------------------------------------
+
+dupla_redutos <- function(partido_cima, partido_baixo, ano, nome_arquivo) {
+  figura <- graficos_reduto(partido_cima,  ano, salvar = FALSE) /
+    graficos_reduto(partido_baixo, ano, salvar = FALSE)
+  
+  arquivo <- here::here("figuras", base::paste0(nome_arquivo, ".png"))
+  base::dir.create(here::here("figuras"), showWarnings = FALSE)
+  ggplot2::ggsave(arquivo, figura, width = 14, height = 12, dpi = 300, bg = "white")
+  base::message("   salvo em ", arquivo)
+  
+  figura
+}
+
+dupla_redutos("SOLIDARIEDADE|^SD$", "^PSDB$", 2022, "redutos_SD_PSDB_2022")
+dupla_redutos("^PL$", "^PSB$", 2022, "redutos_PL_PSB_2022")
+dupla_redutos("UNIÃO|^UNIAO$", "^PCB$", 2022, "redutos_UNIAO_PCB_2022")
+
+# ANOS DE 1998 ----------------------------------------------------------------
+
+dupla_redutos <- function(partido_cima, partido_baixo, ano, nome_arquivo) {
+  figura <- graficos_reduto(partido_cima,  ano, salvar = FALSE) /
+    graficos_reduto(partido_baixo, ano, salvar = FALSE)
+  
+  arquivo <- here::here("figuras", base::paste0(nome_arquivo, ".png"))
+  base::dir.create(here::here("figuras"), showWarnings = FALSE)
+  ggplot2::ggsave(arquivo, figura, width = 14, height = 12, dpi = 300, bg = "white")
+  base::message("   salvo em ", arquivo)
+  
+  figura
+}
+
+dupla_redutos("^PMDB$", "^PSB$", 1998, "redutos_PMDB_PSB_1998")
+dupla_redutos("^PSDB$", "^PSC$", 1998, "redutos_PSDB_PSC_1998")
+dupla_redutos("^PSTU$", "^PSN$", 1998, "redutos_PSTU_PSN_1998")
+
+# =============================================================================
+# PASSO 11: GRADE TODOS OS PARTIDOS (linhas) x 1998-2022 (colunas) - força p²
+# =============================================================================
+# O QUE: um mapa de força (p²) por partido e ano; quadro em branco quando o
+#        partido não disputou (ou quando o loess não consegue ajustar).
+# POR QUÊ: recria locais e malha aqui, porque outros scripts usam os mesmos
+#          nomes e podem tê-los sobrescrito.
+# FUNÇÃO: ggplot2::facet_grid(drop = FALSE) mantém as células vazias;
+#         base::Map() aplica superficie_celula() a cada par partido-ano.
+# PRECISA DE: dados_limpos, contorno_pe, CHAVE_LOCAL, dentro_do_contorno(),
+#             forca_partido_ano(), superficie_partido_ano() (passos 0 a 6).
+# -----------------------------------------------------------------------------
+base::message("PASSO 11: grade partidos x anos")
+
+ANOS_GRADE <- c(1998, 2002, 2006, 2010, 2014, 2018, 2022)
+SPAN_GRADE <- 0.08
+RESOLUCAO  <- 150
+
+# 1. Coordenadas por local de votação (a partir de dados_limpos)
+coordenadas_local <- dados_limpos |>
+  dplyr::filter(!base::is.na(NR_LATITUDE), !base::is.na(NR_LONGITUDE)) |>
+  dplyr::arrange(dplyr::desc(ANO_ELEICAO)) |>
+  dplyr::distinct(dplyr::across(dplyr::all_of(CHAVE_LOCAL)), .keep_all = TRUE) |>
+  dplyr::select(dplyr::all_of(CHAVE_LOCAL),
+                LATITUDE = NR_LATITUDE, LONGITUDE = NR_LONGITUDE)
+dplyr::glimpse(coordenadas_local)
+
+validos_coordenados <- dados_limpos |>
+  dplyr::filter(VOTO_VALIDO, !base::is.na(SG_PARTIDO)) |>
+  dplyr::left_join(coordenadas_local, by = CHAVE_LOCAL) |>
+  dplyr::filter(!base::is.na(LATITUDE))
+dplyr::glimpse(validos_coordenados)
+
+# 2. Locais de votação dentro de PE (denominador da proporção)
+locais <- validos_coordenados |>
+  dplyr::summarise(
+    VOTOS_VALIDOS_LOCAL = base::sum(QT_VOTOS),
+    LATITUDE  = dplyr::first(LATITUDE),
+    LONGITUDE = dplyr::first(LONGITUDE),
+    .by = c(ANO_ELEICAO, dplyr::all_of(CHAVE_LOCAL))
+  )
+locais <- dplyr::filter(locais, dentro_do_contorno(locais))
+dplyr::glimpse(locais)
+
+partidos_anos <- validos_coordenados |>
+  dplyr::count(ANO_ELEICAO, SG_PARTIDO, wt = QT_VOTOS, name = "VOTOS")
+
+# 3. Malha regular sobre PE
+limites_pe <- sf::st_bbox(contorno_pe)
+vetor_longitude <- base::seq(limites_pe[["xmin"]], limites_pe[["xmax"]],
+                             length.out = RESOLUCAO)
+vetor_latitude  <- base::seq(limites_pe[["ymin"]], limites_pe[["ymax"]],
+                             length.out = RESOLUCAO)
+malha <- base::expand.grid(LONGITUDE = vetor_longitude,
+                           LATITUDE  = vetor_latitude)
+malha_dentro_pe <- dentro_do_contorno(malha)
+
+base::stopifnot(
+  base::all(c("LONGITUDE", "LATITUDE") %in% base::names(locais)),
+  base::all(c("LONGITUDE", "LATITUDE") %in% base::names(malha))
+)
+
+# 4. Partidos (linhas, do mais ao menos votado) e combinações existentes
+ordem_partidos <- partidos_anos |>
+  dplyr::filter(ANO_ELEICAO %in% ANOS_GRADE) |>
+  dplyr::count(SG_PARTIDO, wt = VOTOS, sort = TRUE) |>
+  dplyr::pull(SG_PARTIDO)
+utils::str(ordem_partidos)
+
+combinacoes <- partidos_anos |>
+  dplyr::filter(ANO_ELEICAO %in% ANOS_GRADE) |>
+  dplyr::distinct(SG_PARTIDO, ANO_ELEICAO)
+dplyr::glimpse(combinacoes)
+
+# 5. Superfície de uma célula (partido x ano); NULL se falhar
+superficie_celula <- function(partido, ano) {
+  base::message("   ", partido, " ", ano)
+  base::tryCatch({
+    forca <- forca_partido_ano(base::paste0("^", partido, "$"), ano,
+                               usar_quadrado = TRUE)
+    z <- superficie_partido_ano(forca, span = SPAN_GRADE)
+    base::data.frame(LONGITUDE   = malha$LONGITUDE,
+                     LATITUDE    = malha$LATITUDE,
+                     Z           = z,
+                     SG_PARTIDO  = partido,
+                     ANO_ELEICAO = ano)
+  }, error = function(erro) {
+    base::message("   ! ", partido, " ", ano, " em branco: ",
+                  base::conditionMessage(erro))
+    NULL
+  })
+}
+
+# Teste rápido antes de rodar tudo
+dplyr::glimpse(superficie_celula(ordem_partidos[1],
+                                 base::max(combinacoes$ANO_ELEICAO)))
+
+superficies_grade <- base::Map(superficie_celula,
+                               combinacoes$SG_PARTIDO,
+                               combinacoes$ANO_ELEICAO) |>
+  dplyr::bind_rows()
+
+if (!"Z" %in% base::names(superficies_grade)) {
+  base::stop("Nenhuma superfície foi calculada; veja as mensagens acima.")
+}
+
+superficies_grade <- superficies_grade |>
+  dplyr::filter(!base::is.na(Z)) |>
+  dplyr::mutate(
+    SG_PARTIDO  = base::factor(SG_PARTIDO,  levels = ordem_partidos),
+    ANO_ELEICAO = base::factor(ANO_ELEICAO, levels = ANOS_GRADE)
+  )
+dplyr::glimpse(superficies_grade)
+dplyr::count(superficies_grade, SG_PARTIDO, ANO_ELEICAO)
+
+# 6. Contorno só nas células com dados (as vazias ficam em branco)
+contorno_grade <- superficies_grade |>
+  dplyr::distinct(SG_PARTIDO, ANO_ELEICAO) |>
+  dplyr::cross_join(contorno_pe) |>
+  sf::st_as_sf()
+
+# 7. A grade
+grade <- ggplot2::ggplot() +
+  ggplot2::geom_raster(data = superficies_grade,
+                       ggplot2::aes(x = LONGITUDE, y = LATITUDE, fill = Z)) +
+  ggplot2::geom_contour(data = superficies_grade,
+                        ggplot2::aes(x = LONGITUDE, y = LATITUDE, z = Z),
+                        color = "white", linewidth = 0.1, bins = 8) +
+  ggplot2::geom_sf(data = contorno_grade, fill = NA, color = "grey30",
+                   linewidth = 0.2) +
+  ggplot2::scale_fill_viridis_c(name = "Força (p²)") +
+  ggplot2::facet_grid(SG_PARTIDO ~ ANO_ELEICAO, drop = FALSE, switch = "y") +
+  ggplot2::labs(x = NULL, y = NULL) +
+  ggplot2::theme_void(base_size = 11) +
+  ggplot2::theme(
+    strip.text        = ggplot2::element_text(face = "bold", size = 12),
+    strip.text.y.left = ggplot2::element_text(angle = 0, face = "bold"),
+    legend.position   = "top",
+    legend.key.width  = ggplot2::unit(4, "cm"),
+    panel.spacing     = ggplot2::unit(0.3, "lines"),
+    plot.background   = ggplot2::element_rect(fill = "white", color = NA)
+  )
+
+# 8. Salvar (PDF vetorial para zoom; PNG 300 dpi)
+largura <- 4.0 * base::length(ANOS_GRADE) + 2
+altura  <- 1.5 * base::length(ordem_partidos) + 2
+utils::str(c(largura = largura, altura = altura))
+
+base::dir.create(here::here("figuras"), showWarnings = FALSE)
+arquivo_grade <- here::here("figuras", "grade_partidos_1998_2022")
+
+ggplot2::ggsave(base::paste0(arquivo_grade, ".pdf"), grade,
+                width = largura, height = altura, limitsize = FALSE,
+                device = grDevices::cairo_pdf)
+ggplot2::ggsave(base::paste0(arquivo_grade, ".png"), grade,
+                width = largura, height = altura, limitsize = FALSE,
+                dpi = 300, bg = "white")
+
+base::stopifnot(base::file.exists(base::paste0(arquivo_grade, ".pdf")))
+utils::browseURL(base::paste0(arquivo_grade, ".pdf"))
